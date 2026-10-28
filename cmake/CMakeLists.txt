@@ -128,18 +128,70 @@ add_dependencies(pm3rrg_rdv4_static pm3x_bz2 pm3x_lz4)
 
 get_target_property(PM3X_CLIENT_SOURCES pm3rrg_rdv4_static SOURCES)
 
+# Include paths shared by the client, the bridge and the small AVX libraries.
+set(PM3X_CLIENT_INCLUDE_DIRS
+    "${PM3_ROOT}/common"
+    "${PM3_ROOT}/common_fpga"
+    "${PM3_ROOT}/include"
+    "${PM3_ROOT}/client/src"
+    "${PM3_ROOT}/client/include"
+    "${PM3_ROOT}/common/mbedtls"
+    "${PM3_ROOT}/client/deps/jansson"
+    "${PM3_ROOT}/client/deps/cliparser"
+    "${PM3_ROOT}/client/deps/liblua"
+    "${PM3_ROOT}/client/deps/tinycbor"
+    "${PM3_ROOT}/client/deps/amiitool"
+    "${PM3_ROOT}/client/deps/reveng"
+    "${PM3_ROOT}/client/deps/hardnested"
+    "${PM3_ROOT}/client/deps/id48/public"
+    "${PM3_ROOT}/client/deps/mqtt"
+    "${PM3_ROOT}/client/deps/vec"
+    "${PM3_ROOT}/client/deps/whereami"
+    "${PM3X_ROOT}/vendor/lz4/lib"
+    "${PM3X_ROOT}/vendor/bzip2"
+)
+
+set(PM3X_EXTRA_LINK_TARGETS "")
+
 # experimental_lib lists the AVX sources but, unlike client/CMakeLists.txt,
-# never enables the instruction sets they need.  Mirror upstream's conditions.
-# The properties are attached to the exact path strings the target registered,
-# because CMake treats differently spelled paths as different sources.
-foreach(pm3x_source IN LISTS PM3X_CLIENT_SOURCES)
-    get_filename_component(pm3x_source_name "${pm3x_source}" NAME)
-    if(pm3x_source_name STREQUAL "cipher_bs_avx2.c" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86")
-        set_source_files_properties("${pm3x_source}" PROPERTIES COMPILE_OPTIONS "-mavx2")
-    elseif(pm3x_source_name STREQUAL "cipher_bs_avx512.c" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-        set_source_files_properties("${pm3x_source}" PROPERTIES COMPILE_OPTIONS "-mavx512f")
+# never enables the instruction sets they need.  Source file properties cannot
+# be attached from this directory (CMake scopes them to the directory that
+# added the target), so these two translation units are compiled separately
+# with the right -m flags and linked in.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86")
+    set(PM3X_AVX2_SOURCES "")
+    set(PM3X_AVX512_SOURCES "")
+    set(PM3X_KEPT_SOURCES "")
+    foreach(pm3x_source IN LISTS PM3X_CLIENT_SOURCES)
+        get_filename_component(pm3x_source_name "${pm3x_source}" NAME)
+        if(pm3x_source_name STREQUAL "cipher_bs_avx2.c")
+            list(APPEND PM3X_AVX2_SOURCES "${pm3x_source}")
+        elseif(pm3x_source_name STREQUAL "cipher_bs_avx512.c")
+            list(APPEND PM3X_AVX512_SOURCES "${pm3x_source}")
+        else()
+            list(APPEND PM3X_KEPT_SOURCES "${pm3x_source}")
+        endif()
+    endforeach()
+
+    set_property(TARGET pm3rrg_rdv4_static PROPERTY SOURCES ${PM3X_KEPT_SOURCES})
+    set(PM3X_CLIENT_SOURCES "${PM3X_KEPT_SOURCES}")
+
+    if(PM3X_AVX2_SOURCES)
+        add_library(pm3x_avx2 STATIC ${PM3X_AVX2_SOURCES})
+        target_include_directories(pm3x_avx2 PRIVATE ${PM3X_CLIENT_INCLUDE_DIRS})
+        target_compile_options(pm3x_avx2 PRIVATE -O3 -mavx2 -Wno-error)
+        add_dependencies(pm3rrg_rdv4_static pm3x_avx2)
+        list(APPEND PM3X_EXTRA_LINK_TARGETS pm3x_avx2)
     endif()
-endforeach()
+
+    if(PM3X_AVX512_SOURCES AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+        add_library(pm3x_avx512 STATIC ${PM3X_AVX512_SOURCES})
+        target_include_directories(pm3x_avx512 PRIVATE ${PM3X_CLIENT_INCLUDE_DIRS})
+        target_compile_options(pm3x_avx512 PRIVATE -O3 -mavx512f -Wno-error)
+        add_dependencies(pm3rrg_rdv4_static pm3x_avx512)
+        list(APPEND PM3X_EXTRA_LINK_TARGETS pm3x_avx512)
+    endif()
+endif()
 
 if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # Lua's os.execute() must not call system(), which the iOS SDK marks as
@@ -176,6 +228,7 @@ endif()
 #-----------------------------------------------------------------------------
 set(PM3X_LINK_TARGETS
     pm3rrg_rdv4_static
+    ${PM3X_EXTRA_LINK_TARGETS}
     pm3rrg_rdv4_mbedtls
     pm3rrg_rdv4_cliparser
     pm3rrg_rdv4_lua
@@ -216,27 +269,7 @@ file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/pm3x_static_libs.txt" CONTENT "${PM3X_
 # compiled with.  Spelling them out is more reliable than reading target
 # properties: the bundled deps record their include directories as paths
 # relative to client/deps.
-set(PM3X_INCLUDE_DIRS
-    "${PM3_ROOT}/common"
-    "${PM3_ROOT}/common_fpga"
-    "${PM3_ROOT}/include"
-    "${PM3_ROOT}/client/src"
-    "${PM3_ROOT}/client/include"
-    "${PM3_ROOT}/common/mbedtls"
-    "${PM3_ROOT}/client/deps/jansson"
-    "${PM3_ROOT}/client/deps/cliparser"
-    "${PM3_ROOT}/client/deps/liblua"
-    "${PM3_ROOT}/client/deps/tinycbor"
-    "${PM3_ROOT}/client/deps/amiitool"
-    "${PM3_ROOT}/client/deps/reveng"
-    "${PM3_ROOT}/client/deps/hardnested"
-    "${PM3_ROOT}/client/deps/id48/public"
-    "${PM3_ROOT}/client/deps/mqtt"
-    "${PM3_ROOT}/client/deps/vec"
-    "${PM3_ROOT}/client/deps/whereami"
-    "${PM3X_ROOT}/vendor/lz4/lib"
-    "${PM3X_ROOT}/vendor/bzip2"
-)
+set(PM3X_INCLUDE_DIRS ${PM3X_CLIENT_INCLUDE_DIRS})
 
 foreach(pm3x_target IN LISTS PM3X_LINK_TARGETS)
     if(NOT TARGET ${pm3x_target})
