@@ -61,7 +61,7 @@ jobs:
           cd /tmp/pkg
           cargo package --no-verify --allow-dirty
           CRATE=$(ls target/package/*.crate | head -n1)
-          echo "crate=$CRATE" >> "$GITHUB_OUTPUT"
+          echo "crate=$(realpath "$CRATE")" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$CRATE")" >> "$GITHUB_OUTPUT"
           ls -la target/package
 
