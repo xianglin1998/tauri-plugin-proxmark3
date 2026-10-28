@@ -31,8 +31,13 @@ endif()
 # iOS has no system(): route every call to an inline stub instead of patching
 # the submodule.  The header includes <stdlib.h> first and then shadows the
 # name, so the unavailable declaration is never referenced.
-if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS" AND PM3X_IOS_SYSTEM_HEADER)
-    add_compile_options(-include "${PM3X_IOS_SYSTEM_HEADER}")
+if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # The upstream client compiles client/src/util_darwin.m on Apple platforms,
+    # so the Objective-C language has to be enabled for this project.
+    enable_language(OBJC)
+    if(PM3X_IOS_SYSTEM_HEADER)
+        add_compile_options(-include "${PM3X_IOS_SYSTEM_HEADER}")
+    endif()
 endif()
 
 # Upstream builds with -Werror, which is right for the Proxmark3 project but
