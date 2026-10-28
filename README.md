@@ -53,7 +53,7 @@
 ```toml
 # 应用 crate 的 Cargo.toml
 [dependencies]
-tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.1.0" }
+tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.1.1" }
 # 或者从 GitHub Release 下载 .crate 后本地 path 依赖
 ```
 
@@ -184,11 +184,11 @@ cargo test --target x86_64-pc-windows-gnu # 离线模式端到端测试，无需
 
 - `.github/workflows/ci.yml`：Linux / macOS / Windows(GNU) 构建 + 测试；Android 三个 ABI；iOS 模拟器与真机；`cargo package` 校验
 - `.github/workflows/release.yml`：推送 `v*` tag 时，把包含 proxmark3 源码的 crate 打包成 `.crate`
-  并自动发布到 GitHub Release（可选：配置 `CARGO_REGISTRY_TOKEN` 后同时发布到 crates.io）
+  并自动发布到 GitHub Release
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 > `cargo package` 默认不会打包 git submodule 的内容，所以发布流程会把源码树复制到临时目录再打包，
