@@ -13,6 +13,10 @@
 #include <io.h>
 #endif
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #include "comms.h"
 #include "commonutil.h"
 #include "pm3.h"
@@ -26,6 +30,15 @@ static bool g_initialized = false;
 static bool g_opened = false;
 static bool g_offline = false;
 static char g_last_error[512] = {0};
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// iOS forbids spawning processes.  Both the client's `!` shell escape and
+// Lua's os.execute() are routed here by the build (see cmake/CMakeLists.txt).
+int pm3x_platform_system(const char *command) {
+    (void)command;
+    return -1;
+}
+#endif
 
 typedef struct {
     int saved_fd;

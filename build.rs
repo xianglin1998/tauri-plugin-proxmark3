@@ -121,8 +121,8 @@ fn main() {
                 )
             });
             let mingw_root = mingw.parent().map(Path::to_path_buf);
-            let gcc = mingw.join(exe("gcc"));
-            let gxx = mingw.join(exe("g++"));
+            let gcc = gcc_path(&mingw);
+            let gxx = gxx_path(&mingw);
             configure
                 .arg(format!("-DCMAKE_C_COMPILER={}", gcc.display()))
                 .arg(format!("-DCMAKE_CXX_COMPILER={}", gxx.display()));
@@ -228,7 +228,7 @@ fn main() {
     bridge.warnings(true);
     if let Some(mingw) = mingw_bin_dir_if_windows(&target_os) {
         if target_env == "gnu" {
-            bridge.compiler(mingw.join(exe("gcc")));
+            bridge.compiler(gcc_path(&mingw));
             bridge.archiver(mingw.join(exe("ar")));
         }
     }
@@ -358,8 +358,11 @@ fn mingw_bin_dir_if_windows(target_os: &str) -> Option<PathBuf> {
 
 fn mingw_bin_dir() -> Option<PathBuf> {
     if let Ok(value) = env::var("PM3X_MINGW_BIN") {
+        // Tolerate `PM3X_MINGW_BIN="C:\..."` written with quotes by a CI
+        // script or a shell config.
+        let value = value.trim().trim_matches('"').trim_matches('\'').to_string();
         let dir = PathBuf::from(value);
-        if dir.join(exe("gcc")).exists() {
+        if has_gcc(&dir) {
             return Some(dir);
         }
     }
@@ -372,7 +375,29 @@ fn mingw_bin_dir() -> Option<PathBuf> {
     candidates
         .iter()
         .map(PathBuf::from)
-        .find(|dir| dir.join(exe("gcc")).exists())
+        .find(|dir| has_gcc(dir))
+}
+
+fn has_gcc(dir: &Path) -> bool {
+    dir.join("gcc.exe").exists() || dir.join("x86_64-w64-mingw32-gcc.exe").exists()
+}
+
+fn gcc_path(dir: &Path) -> PathBuf {
+    let direct = dir.join("gcc.exe");
+    if direct.exists() {
+        direct
+    } else {
+        dir.join("x86_64-w64-mingw32-gcc.exe")
+    }
+}
+
+fn gxx_path(dir: &Path) -> PathBuf {
+    let direct = dir.join("g++.exe");
+    if direct.exists() {
+        direct
+    } else {
+        dir.join("x86_64-w64-mingw32-g++.exe")
+    }
 }
 
 fn android_ndk_dir() -> Option<PathBuf> {

@@ -76,9 +76,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "C:\msys64\usr\bin"    | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "PM3X_MINGW_BIN=C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\msys64\ucrt64\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\msys64\usr\bin"
+          Add-Content -Path $env:GITHUB_ENV  -Value "PM3X_MINGW_BIN=C:\msys64\ucrt64\bin"
+          Get-ChildItem C:\msys64 -ErrorAction SilentlyContinue | Select-Object -First 8 Name
+          Get-ChildItem C:\msys64\ucrt64\bin\*gcc*.exe -ErrorAction SilentlyContinue | Select-Object Name
 
       - name: Install Rust
         shell: bash
