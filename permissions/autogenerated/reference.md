@@ -7,6 +7,7 @@ Default permissions for the Proxmark3 plugin
 - `allow-connect`
 - `allow-disconnect`
 - `allow-execute`
+- `allow-execute-stream`
 - `allow-status`
 - `allow-version`
 
@@ -93,6 +94,32 @@ Enables the execute command without any pre-configured scope.
 <td>
 
 Denies the execute command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`proxmark3:allow-execute-stream`
+
+</td>
+<td>
+
+Enables the execute_stream command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`proxmark3:deny-execute-stream`
+
+</td>
+<td>
+
+Denies the execute_stream command without any pre-configured scope.
 
 </td>
 </tr>

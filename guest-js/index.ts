@@ -10,6 +10,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 /** State of the Proxmark3 client session. */
 export interface SessionInfo {
@@ -55,6 +56,37 @@ export async function disconnect(): Promise<SessionInfo> {
  */
 export async function execute(command: string): Promise<CommandOutput> {
   return invoke<CommandOutput>('plugin:proxmark3|execute', { command });
+}
+
+/** Payload of the `proxmark3://output` event. */
+export interface OutputChunk {
+  chunk: string;
+}
+
+/**
+ * Executes one client command and receives its output while it is produced.
+ *
+ * ```ts
+ * const result = await executeStream('hf search', (chunk) => {
+ *   console.log(chunk);
+ * });
+ * ```
+ *
+ * Commands are serialised by the plugin, so a second stream cannot start
+ * before the first one finished.
+ */
+export async function executeStream(
+  command: string,
+  onChunk: (chunk: string) => void,
+): Promise<CommandOutput> {
+  const unlisten = await listen<OutputChunk>('proxmark3://output', (event) => {
+    onChunk(event.payload.chunk);
+  });
+  try {
+    return await invoke<CommandOutput>('plugin:proxmark3|execute_stream', { command });
+  } finally {
+    unlisten();
+  }
 }
 
 /** Current session state. */

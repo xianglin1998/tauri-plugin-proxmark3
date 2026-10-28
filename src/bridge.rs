@@ -6,7 +6,7 @@
 //! thread so a slow (or stuck) device never blocks the Tauri runtime.
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int};
+use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
@@ -19,6 +19,9 @@ use crate::models::{CommandOutput, SessionInfo};
 const PM3X_E_NOT_OPEN: c_int = -2;
 const PM3X_E_DEVICE: c_int = -3;
 
+/// C callback used to forward command output chunks while a command runs.
+type ChunkCallback = extern "C" fn(*mut c_void, *const c_char, usize);
+
 extern "C" {
     fn pm3x_set_home(dir: *const c_char);
     fn pm3x_open(port: *const c_char) -> c_int;
@@ -28,6 +31,11 @@ extern "C" {
     fn pm3x_port() -> *const c_char;
     fn pm3x_version() -> *const c_char;
     fn pm3x_execute(command: *const c_char, out: *mut *mut c_char) -> c_int;
+    fn pm3x_execute_stream(
+        command: *const c_char,
+        callback: Option<ChunkCallback>,
+        userdata: *mut c_void,
+    ) -> c_int;
     fn pm3x_free(ptr: *mut c_char);
     fn pm3x_last_error() -> *const c_char;
 }
@@ -191,4 +199,109 @@ fn status_unlocked() -> SessionInfo {
         port,
         version: unsafe { cstr_to_string(pm3x_version()) },
     }
+}
+
+/// Runs one client command while forwarding its output to `on_chunk` as it is
+/// State shared with the C reader thread for the duration of one command.
+struct StreamState<F> {
+    on_chunk: F,
+    pending: Vec<u8>,
+    collected: Vec<u8>,
+}
+
+/// Trampoline invoked by the C reader thread for every chunk of output.
+///
+/// Safety: `userdata` always points to the `StreamState` owned by
+/// [`execute_stream`], which outlives the call because the C side joins the
+/// reader thread before returning.
+extern "C" fn stream_trampoline<F>(userdata: *mut c_void, data: *const c_char, len: usize)
+where
+    F: FnMut(&str),
+{
+    if userdata.is_null() || data.is_null() || len == 0 {
+        return;
+    }
+    // SAFETY: see the function contract above.
+    let state = unsafe { &mut *(userdata as *mut StreamState<F>) };
+    // SAFETY: the C side guarantees `data` is valid for `len` bytes.
+    let bytes = unsafe { std::slice::from_raw_parts(data as *const u8, len) };
+
+    state.collected.extend_from_slice(bytes);
+    state.pending.extend_from_slice(bytes);
+
+    // Only forward complete UTF-8 sequences; a multi-byte character may
+    // straddle two reads.
+    let valid = match std::str::from_utf8(&state.pending) {
+        Ok(_) => state.pending.len(),
+        Err(error) => error.valid_up_to(),
+    };
+    if valid > 0 {
+        let text = String::from_utf8_lossy(&state.pending[..valid]).into_owned();
+        (state.on_chunk)(&text);
+        state.pending.drain(..valid);
+    }
+}
+
+/// Runs one client command while forwarding its output to `on_chunk` as it is
+/// produced, and returns the complete output when the command finishes.
+///
+/// The command runs on the calling thread (use a blocking thread); `on_chunk`
+/// is invoked from the bridge's reader thread while the command is running.
+pub fn execute_stream<F>(
+    command: &str,
+    home: Option<&Path>,
+    on_chunk: F,
+) -> Result<CommandOutput, Error>
+where
+    F: FnMut(&str) + Send,
+{
+    let started = Instant::now();
+
+    // Opening an offline session is cheap and lets `execute_stream()` work
+    // without an explicit `connect()` call.
+    if unsafe { pm3x_is_open() } == 0 {
+        connect(None, home)?;
+    }
+
+    let command_c = cstring(command)?;
+    let mut state = StreamState {
+        on_chunk,
+        pending: Vec::new(),
+        collected: Vec::new(),
+    };
+
+    let status = {
+        let _guard = lock();
+        unsafe {
+            pm3x_execute_stream(
+                command_c.as_ptr(),
+                Some(stream_trampoline::<F>),
+                &mut state as *mut StreamState<F> as *mut c_void,
+            )
+        }
+    };
+
+    if !state.pending.is_empty() {
+        let text = String::from_utf8_lossy(&state.pending).into_owned();
+        (state.on_chunk)(&text);
+    }
+
+    if status == PM3X_E_NOT_OPEN {
+        return Err(Error::NotOpen);
+    }
+    if status < 0 {
+        let detail = last_error();
+        return Err(Error::client(if detail.is_empty() {
+            format!("command failed with status {status}")
+        } else {
+            detail
+        }));
+    }
+
+    let output = String::from_utf8_lossy(&state.collected).into_owned();
+    Ok(CommandOutput {
+        status,
+        output: ansi::sanitize(&output),
+        duration_ms: started.elapsed().as_millis() as u64,
+    })
 }

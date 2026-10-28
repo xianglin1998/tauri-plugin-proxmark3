@@ -331,6 +331,18 @@
           "markdownDescription": "Denies the execute command without any pre-configured scope."
         },
         {
+          "description": "Enables the execute_stream command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-execute-stream",
+          "markdownDescription": "Enables the execute_stream command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the execute_stream command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-execute-stream",
+          "markdownDescription": "Denies the execute_stream command without any pre-configured scope."
+        },
+        {
           "description": "Enables the status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-status",
@@ -355,10 +367,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-status`\n- `allow-version`",
+          "description": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-status`\n- `allow-version`"
+          "markdownDescription": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`"
         }
       ]
     }

@@ -62,6 +62,14 @@ const char *pm3x_version(void);
 // Returns the client command status (>= 0) or a negative PM3X_E_* code.
 int pm3x_execute(const char *command, char **out);
 
+// Same as pm3x_execute(), but the output is forwarded to `callback` while the
+// command runs, in chunks, so the caller can stream it.  The callback runs on
+// a reader thread owned by the bridge; it is joined before this function
+// returns.  `userdata` is passed through untouched.
+// Returns the client command status (>= 0) or a negative PM3X_E_* code.
+typedef void (*pm3x_chunk_callback)(void *userdata, const char *data, size_t len);
+int pm3x_execute_stream(const char *command, pm3x_chunk_callback callback, void *userdata);
+
 // Releases a string returned through pm3x_execute().
 void pm3x_free(char *ptr);
 

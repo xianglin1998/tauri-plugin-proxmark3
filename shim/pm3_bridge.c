@@ -10,12 +10,13 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <fcntl.h>
 #include <io.h>
+#else
+#include <unistd.h>
 #endif
 
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#endif
+#include <pthread.h>
 
 #include "comms.h"
 #include "commonutil.h"
@@ -31,14 +32,31 @@ static bool g_opened = false;
 static bool g_offline = false;
 static char g_last_error[512] = {0};
 
-#if defined(__APPLE__) && TARGET_OS_IPHONE
-// iOS forbids spawning processes.  Both the client's `!` shell escape and
-// Lua's os.execute() are routed here by the build (see cmake/CMakeLists.txt).
-int pm3x_platform_system(const char *command) {
-    (void)command;
-    return -1;
-}
+typedef struct {
+    int fd;
+    pm3x_chunk_callback callback;
+    void *userdata;
+} pm3x_reader_t;
+
+static void *pm3x_reader_thread(void *arg) {
+    pm3x_reader_t *reader = (pm3x_reader_t *)arg;
+    char buffer[4096];
+
+    for (;;) {
+#ifdef _WIN32
+        int read_len = _read(reader->fd, buffer, (unsigned int)sizeof(buffer));
+#else
+        ssize_t read_len = read(reader->fd, buffer, sizeof(buffer));
 #endif
+        if (read_len <= 0) {
+            break;
+        }
+        if (reader->callback != NULL) {
+            reader->callback(reader->userdata, buffer, (size_t)read_len);
+        }
+    }
+    return NULL;
+}
 
 typedef struct {
     int saved_fd;
@@ -259,6 +277,95 @@ int pm3x_execute(const char *command, char **out) {
     } else {
         free(captured);
     }
+
+    return status;
+}
+
+int pm3x_execute_stream(const char *command, pm3x_chunk_callback callback, void *userdata) {
+    pm3x_clear_error();
+
+    if (command == NULL) {
+        pm3x_set_error("command is NULL");
+        return PM3X_E_INVALID_ARG;
+    }
+    if (!g_opened) {
+        pm3x_set_error("no Proxmark3 session is open");
+        return PM3X_E_NOT_OPEN;
+    }
+
+    int fds[2];
+#ifdef _WIN32
+    if (_pipe(fds, 65536, _O_BINARY) != 0) {
+#else
+    if (pipe(fds) != 0) {
+#endif
+        pm3x_set_error("cannot create the output pipe");
+        return PM3X_E_INTERNAL;
+    }
+
+    pm3x_reader_t reader = {fds[0], callback, userdata};
+    pthread_t thread;
+    bool threaded = pthread_create(&thread, NULL, pm3x_reader_thread, &reader) == 0;
+    if (!threaded) {
+#ifdef _WIN32
+        _close(fds[0]);
+        _close(fds[1]);
+#else
+        close(fds[0]);
+        close(fds[1]);
+#endif
+        pm3x_set_error("cannot start the output reader thread");
+        return PM3X_E_INTERNAL;
+    }
+
+    fflush(stdout);
+#ifdef _WIN32
+    int saved = _dup(_fileno(stdout));
+    if (saved < 0 || _dup2(fds[1], _fileno(stdout)) != 0) {
+        if (saved >= 0) {
+            _close(saved);
+        }
+        _close(fds[1]);
+        pthread_join(thread, NULL);
+        _close(fds[0]);
+        pm3x_set_error("cannot redirect stdout");
+        return PM3X_E_INTERNAL;
+    }
+#else
+    int saved = dup(fileno(stdout));
+    if (saved < 0 || dup2(fds[1], fileno(stdout)) < 0) {
+        if (saved >= 0) {
+            close(saved);
+        }
+        close(fds[1]);
+        pthread_join(thread, NULL);
+        close(fds[0]);
+        pm3x_set_error("cannot redirect stdout");
+        return PM3X_E_INTERNAL;
+    }
+#endif
+
+    int status = pm3_console(g_session.current_device, command, false, false);
+    fflush(stdout);
+
+#ifdef _WIN32
+    _dup2(saved, _fileno(stdout));
+    _close(saved);
+    _close(fds[1]);
+#else
+    dup2(saved, fileno(stdout));
+    close(saved);
+    close(fds[1]);
+#endif
+
+    // Closing the write end is what lets the reader thread see EOF.
+    pthread_join(thread, NULL);
+#ifdef _WIN32
+    _close(fds[0]);
+#else
+    close(fds[0]);
+#endif
+    fflush(stdout);
 
     return status;
 }

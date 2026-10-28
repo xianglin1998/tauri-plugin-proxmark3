@@ -4,6 +4,7 @@ permissions = [
     "allow-connect",
     "allow-disconnect",
     "allow-execute",
+    "allow-execute-stream",
     "allow-status",
     "allow-version",
 ]

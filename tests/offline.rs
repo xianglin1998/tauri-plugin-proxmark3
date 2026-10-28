@@ -55,3 +55,33 @@ fn unknown_command_does_not_fail_the_process() {
         "the client should print its help screen for unknown commands"
     );
 }
+
+#[test]
+fn streams_command_output_while_running() {
+    use std::sync::{Arc, Mutex};
+
+    client::connect(None).expect("offline session");
+
+    let streamed = Arc::new(Mutex::new(String::new()));
+    let sink = Arc::clone(&streamed);
+
+    let result = client::execute_stream("data -h", move |chunk| {
+        sink.lock().expect("chunk sink").push_str(chunk);
+    })
+    .expect("streamed command");
+
+    let streamed = streamed.lock().expect("chunk sink").clone();
+    assert!(
+        !streamed.is_empty(),
+        "the streaming callback should receive output"
+    );
+    assert!(
+        streamed.contains("Graph") || streamed.contains("help"),
+        "unexpected streamed output: {streamed}"
+    );
+    assert!(
+        result.output.contains("Graph") || result.output.contains("help"),
+        "unexpected final output: {}",
+        result.output
+    );
+}

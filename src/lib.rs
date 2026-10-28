@@ -62,6 +62,15 @@ pub mod client {
         bridge::execute(command, home_dir().map(|dir| dir.as_path()))
     }
 
+    /// Executes one client command while forwarding its output to `on_chunk`
+    /// as it is produced (streaming).
+    pub fn execute_stream<F>(command: &str, on_chunk: F) -> Result<CommandOutput, Error>
+    where
+        F: FnMut(&str) + Send,
+    {
+        bridge::execute_stream(command, home_dir().map(|dir| dir.as_path()), on_chunk)
+    }
+
     /// Current session state.
     pub fn status() -> SessionInfo {
         bridge::status()
@@ -95,6 +104,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::connect,
             commands::disconnect,
             commands::execute,
+            commands::execute_stream,
             commands::status,
             commands::version,
         ])
