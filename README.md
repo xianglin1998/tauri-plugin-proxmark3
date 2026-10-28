@@ -199,6 +199,8 @@ git push origin v0.1.0
 - **许可证**：Proxmark3 客户端是 GPLv3。本插件静态链接了它，分发时整体需遵循 GPLv3；
   iOS App Store 的条款与 GPLv3 存在冲突，上架前请自行评估（可考虑仅内部/企业分发）。
 - **Windows**：仅支持 GNU ABI；`*-msvc` 目标会在构建期报错并给出说明。
+  另外 CMake 生成的目标文件路径较长，请把项目放在较短的路径下（例如 `C:\dev\pm3`），
+  否则可能触发 Windows 260 字符路径限制。
 - **蓝牙**：当前 CMake 选项 `SKIPBT=1`（BlueZ 是 Linux 专有依赖），需要时可在 `cmake/CMakeLists.txt` 打开。
 - **Android 串口**：普通 App 无权直接打开 `/dev/ttyACM*`，推荐用 `tcp:` 网络桥或离线模式。
   iOS 没有 USB Host，同理。

@@ -38,6 +38,8 @@ jobs:
           # needed to build the crate.
           rsync -a \
             --exclude /.git \
+            --exclude /.github \
+            --exclude /.proxmark3 \
             --exclude /_temp \
             --exclude /target \
             --exclude /node_modules \

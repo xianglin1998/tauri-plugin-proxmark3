@@ -82,12 +82,18 @@ fn main() {
     // ------------------------------------------------------------------
     // Toolchain selection
     // ------------------------------------------------------------------
+    // CMake object paths inside rustc's target directory get long enough to
+    // hit the 260 character Windows limit (a checkout below a deep directory
+    // is enough).  Keep the CMake build tree in a short, per-OUT_DIR directory
+    // under the system temp dir instead.
+    let build_dir = cmake_build_dir(&out_dir);
+
     let mut configure = Command::new(cmake_program());
     configure
         .arg("-S")
         .arg(manifest_dir.join("cmake"))
         .arg("-B")
-        .arg(out_dir.join("pm3build"))
+        .arg(&build_dir)
         .arg("-DCMAKE_BUILD_TYPE=Release")
         .arg("-DCMAKE_POSITION_INDEPENDENT_CODE=ON");
 
@@ -192,7 +198,7 @@ fn main() {
     let mut build = Command::new(cmake_program());
     build
         .arg("--build")
-        .arg(out_dir.join("pm3build"))
+        .arg(&build_dir)
         .arg("--target")
         .arg("pm3rrg_rdv4_static")
         .arg("-j")
@@ -210,7 +216,6 @@ fn main() {
     // archives left to right, so the object that calls into the client has to
     // come first.
     // ------------------------------------------------------------------
-    let build_dir = out_dir.join("pm3build");
     let include_dirs = read_lines(&build_dir.join("pm3x_include_dirs.txt"));
     assert!(
         !include_dirs.is_empty(),
@@ -299,6 +304,25 @@ fn cmake_generator() -> Option<String> {
     match probe {
         Ok(status) if status.success() => Some("Ninja".to_string()),
         _ => None,
+    }
+}
+
+fn cmake_build_dir(out_dir: &Path) -> PathBuf {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    out_dir.hash(&mut hasher);
+    let digest = format!("{:016x}", hasher.finish());
+
+    #[cfg(windows)]
+    {
+        // Short base path, e.g. C:\Users\<user>\AppData\Local\Temp\pm3x-<hash>
+        std::env::temp_dir().join(format!("pm3x-{digest}"))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = digest;
+        out_dir.join("pm3build")
     }
 }
 
