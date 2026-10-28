@@ -59,10 +59,10 @@ jobs:
 
       - name: Install MSYS2 UCRT64 toolchain (Windows)
         if: runner.os == 'Windows'
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
-          location: C:\msys64
           update: false
           install: >-
             mingw-w64-ucrt-x86_64-gcc
@@ -72,15 +72,16 @@ jobs:
             make
             git
 
-      - name: Put MinGW-w64 on PATH (Windows)
+      - name: Expose MinGW-w64 on PATH (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\msys64\ucrt64\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\msys64\usr\bin"
-          Add-Content -Path $env:GITHUB_ENV  -Value "PM3X_MINGW_BIN=C:\msys64\ucrt64\bin"
-          Get-ChildItem C:\msys64 -ErrorAction SilentlyContinue | Select-Object -First 8 Name
-          Get-ChildItem C:\msys64\ucrt64\bin\*gcc*.exe -ErrorAction SilentlyContinue | Select-Object Name
+          $root = "${{ steps.msys2.outputs.msys2-location }}"
+          Add-Content -Path $env:GITHUB_PATH -Value "$root\ucrt64\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value "$root\usr\bin"
+          Add-Content -Path $env:GITHUB_ENV  -Value "PM3X_MINGW_BIN=$root\ucrt64\bin"
+          Write-Host "MSYS2 at $root"
+          Test-Path "$root\ucrt64\bin\gcc.exe"
 
       - name: Install Rust
         shell: bash
