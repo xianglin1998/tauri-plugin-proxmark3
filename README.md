@@ -3,6 +3,8 @@
 把 [Proxmark3](https://github.com/RfidResearchGroup/proxmark3) 客户端（`pm3`）编译成静态库，并以
 [Tauri 2](https://v2.tauri.app/develop/plugins/) 插件的形式暴露给前端 / Rust 后端调用。
 
+最新构建产物（`.crate`）：[GitHub Releases](https://github.com/xianglin1998/tauri-plugin-proxmark3/releases)
+
 - 通过 **git submodule** 固定 Proxmark3 版本（`proxmark3/`）
 - 复用上游已有的库化实现 `client/experimental_lib`（`libpm3`，导出 `pm3.h`），不重复造轮子
 - 额外提供一个 C bridge，解决上游 `pm3_open()` 打不开端口时直接 `exit()` 的问题，并补全输出抓取

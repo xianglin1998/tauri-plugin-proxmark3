@@ -100,7 +100,7 @@ jobs:
 
       - name: Test
         shell: bash
-        run: cargo test --target ${{ matrix.target }}
+        run: cargo test --release --target ${{ matrix.target }}
 
   # ---------------------------------------------------------------------------
   # Android: cross compile with the NDK for the three ABIs Tauri supports.
