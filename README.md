@@ -130,6 +130,7 @@ println!("{}", out.output);
 | Ninja | 可选但推荐（`build.rs` 检测到就会用），否则用平台默认 generator |
 | C/C++ 编译器 | Linux/macOS: gcc/clang；Android: NDK clang；iOS: Apple clang；Windows: MSYS2 UCRT64 gcc |
 | zlib | 找到就会启用上游的 zlib 支持（Linux: `zlib1g-dev`） |
+| Linux 桌面 | Tauri 本身依赖 GTK/WebKitGTK：`libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev` |
 
 Windows（MSYS2 UCRT64）：
 

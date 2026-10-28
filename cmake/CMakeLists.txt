@@ -126,6 +126,12 @@ endforeach()
 
 add_dependencies(pm3rrg_rdv4_static pm3x_bz2 pm3x_lz4)
 
+if(APPLE AND CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Lua's os.execute() must not call system(), which the iOS SDK marks as
+    # unavailable.  Lua ships an LUA_USE_IOS switch for exactly this.
+    target_compile_definitions(pm3rrg_rdv4_lua PRIVATE LUA_USE_IOS)
+endif()
+
 #-----------------------------------------------------------------------------
 # Emit the ordered archive list consumed by build.rs.
 #-----------------------------------------------------------------------------
