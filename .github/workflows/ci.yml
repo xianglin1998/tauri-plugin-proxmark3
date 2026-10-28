@@ -1,0 +1,216 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags-ignore: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Desktop: Linux (gcc), macOS (Apple clang), Windows (MinGW-w64, GNU ABI).
+  # ---------------------------------------------------------------------------
+  desktop:
+    name: Desktop / ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: macos-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+          - name: windows-x86_64-gnu
+            os: windows-2022
+            target: x86_64-pc-windows-gnu
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc g++ zlib1g-dev
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          command -v cmake || brew install cmake
+          command -v ninja || brew install ninja
+          command -v gcc   || xcode-select -p
+
+      - name: Install MSYS2 UCRT64 toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-zlib
+            make
+            git
+
+      - name: Put MinGW-w64 on PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\msys64\usr\bin"    | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "PM3X_MINGW_BIN=C:\msys64\ucrt64\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            rustup target add x86_64-pc-windows-gnu
+          fi
+          rustc -Vv
+          cargo -V
+
+      - name: Build
+        shell: bash
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+      - name: Test
+        shell: bash
+        run: cargo test --target ${{ matrix.target }}
+
+  # ---------------------------------------------------------------------------
+  # Android: cross compile with the NDK for the three ABIs Tauri supports.
+  # ---------------------------------------------------------------------------
+  android:
+    name: Android / ${{ matrix.abi }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+          - abi: armeabi-v7a
+            target: armv7-linux-androideabi
+          - abi: x86_64
+            target: x86_64-linux-android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build make
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+          cargo install cargo-ndk --locked
+
+      - name: Build for Android
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: |
+          cargo ndk -t ${{ matrix.abi }} -o "$PWD/jniLibs" build --release
+
+      - name: Upload shared library
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.abi }}
+          path: jniLibs
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # iOS: compile for the simulator and for a device (no code signing needed for
+  # a static library).
+  # ---------------------------------------------------------------------------
+  ios:
+    name: iOS
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust targets
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Build for the iOS simulator
+        run: cargo build --release --target aarch64-apple-ios-sim
+
+      - name: Build for iOS devices
+        run: cargo build --release --target aarch64-apple-ios
+
+      - name: Collect static libraries
+        run: |
+          mkdir -p ios-libs
+          lipo -create \
+            target/aarch64-apple-ios/release/libtauri_plugin_proxmark3.a \
+            -output ios-libs/libtauri_plugin_proxmark3-device.a || cp target/aarch64-apple-ios/release/libtauri_plugin_proxmark3.a ios-libs/
+          ls -la ios-libs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-staticlib
+          path: ios-libs
+
+  # ---------------------------------------------------------------------------
+  # Packaging: make sure the crate can be packaged (the release workflow does
+  # the real publishing).
+  # ---------------------------------------------------------------------------
+  package:
+    name: Cargo package
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Package
+        run: |
+          mkdir -p /tmp/pkg
+          rsync -a --exclude .git --exclude _temp --exclude target --exclude node_modules ./ /tmp/pkg/
+          cd /tmp/pkg
+          cargo package --no-verify --allow-dirty
+          ls -la target/package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crate
+          path: /tmp/pkg/target/package/*.crate
+          if-no-files-found: error

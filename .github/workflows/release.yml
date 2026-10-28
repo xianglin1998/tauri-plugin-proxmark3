@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (for example v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  crate:
+    name: Build and publish the Rust crate
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustc -Vv
+          cargo -V
+
+      - name: Create the distributable source tree
+        run: |
+          mkdir -p /tmp/pkg
+          # The proxmark3 submodule is a separate git repository, so `cargo
+          # package` would leave it out.  Copy the working tree (which already
+          # contains the submodule files) and drop everything that is not
+          # needed to build the crate.
+          rsync -a \
+            --exclude /.git \
+            --exclude /_temp \
+            --exclude /target \
+            --exclude /node_modules \
+            --exclude /proxmark3/armsrc \
+            --exclude /proxmark3/bootrom \
+            --exclude /proxmark3/armlib \
+            --exclude /proxmark3/fpga \
+            --exclude /proxmark3/traces \
+            --exclude /proxmark3/doc \
+            --exclude /proxmark3/driver \
+            --exclude /proxmark3/recovery \
+            --exclude /proxmark3/docker \
+            --exclude /proxmark3/.github \
+            --exclude /proxmark3/.git \
+            ./ /tmp/pkg/
+          du -sh /tmp/pkg
+
+      - name: Package
+        id: package
+        run: |
+          cd /tmp/pkg
+          cargo package --no-verify --allow-dirty
+          CRATE=$(ls target/package/*.crate | head -n1)
+          echo "crate=$CRATE" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$CRATE")" >> "$GITHUB_OUTPUT"
+          ls -la target/package
+
+      - name: Upload crate as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: ${{ steps.package.outputs.crate }}
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ${{ steps.package.outputs.crate }}

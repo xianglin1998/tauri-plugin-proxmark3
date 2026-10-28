@@ -1,0 +1,22 @@
+{
+  "name": "tauri-plugin-proxmark3-api",
+  "version": "0.1.0",
+  "description": "TypeScript bindings for tauri-plugin-proxmark3",
+  "type": "module",
+  "main": "./dist-js/index.js",
+  "types": "./dist-js/index.d.ts",
+  "files": [
+    "dist-js",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --project ./tsconfig.json"
+  },
+  "peerDependencies": {
+    "@tauri-apps/api": "^2.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "typescript": "^5.6.0"
+  }
+}

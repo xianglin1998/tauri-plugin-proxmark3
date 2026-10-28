@@ -1,0 +1,9 @@
+[default]
+description = "Default permissions for the Proxmark3 plugin"
+permissions = [
+    "allow-connect",
+    "allow-disconnect",
+    "allow-execute",
+    "allow-status",
+    "allow-version",
+]
