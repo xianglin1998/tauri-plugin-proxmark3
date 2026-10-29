@@ -348,6 +348,7 @@ jobs:
                   "version": os.environ["PM3_VERSION"],
               },
               "firmware": firmware,
+              "bootrom": {"file": "PM3BOOTROM.elf"},
               "client_resources": {
                   "file": f"proxmark3-client-resources-{os.environ['PM3_SHORT']}.zip",
                   "unpack_to": "share/proxmark3",
@@ -399,7 +400,7 @@ jobs:
             echo "| \`proxmark3-client-resources-${PM3_SHORT}.zip\` | cmdscripts / dictionaries / lualibs / luascripts / pyscripts / resources |"
             echo "| \`manifest.json\` | 机器可读的版本、commit、固件列表与 SHA256 |"
             echo ""
-            echo "## 固件（firmware/）"
+            echo "## 固件（proxmark3-firmware-${PM3_SHORT}.zip）"
             echo ""
             echo "| ELF | PLATFORM | PLATFORM_EXTRAS | 说明 |"
             echo "| --- | --- | --- | --- |"
@@ -421,7 +422,7 @@ jobs:
               done < "$meta"
               note=""
               if [ -n "$size" ]; then note="${size}KB 版本"; fi
-              if [ -n "$skips" ]; then note="${note}带 SKIP_* 裁剪"; fi
+              if [ -n "$skips" ]; then note="${note}，带 SKIP_* 裁剪"; fi
               extras_display="${extras:--}"
               echo "| \`${name}.elf\` | ${platform} | ${extras_display} | ${note} |"
             done
