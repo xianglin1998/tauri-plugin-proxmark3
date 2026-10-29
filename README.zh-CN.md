@@ -9,12 +9,15 @@
 [GitHub Releases](https://github.com/xianglin1998/tauri-plugin-proxmark3/releases)
 
 - 通过 **git submodule** 固定 Proxmark3 版本（`proxmark3/`）
-- **直接使用上游** `client/experimental_lib`（导出 `pm3.h` 的 `libpm3`）作为 CMake 工程：
-  不复制、不修改上游的 CMake / 源码，也不在本仓库里 vendor 任何第三方库
+- **直接使用上游** `client/experimental_lib`（导出 `pm3.h` 的 `libpm3`）作为 CMake 工程；
+  submodule 不会被留下改动：`patch/proxmark3/` 里的少量兼容文件只在 CMake 构建期间替换进去，
+  构建结束自动还原；本仓库也不 vendor 任何第三方库
 - bzip2 / lz4 由上游 CMake 自带的 `EMBED_BZIP2` / `EMBED_LZ4`（ExternalProject）在构建时下载编译
 - iOS 交叉编译使用 [leetal/ios-cmake](https://github.com/leetal/ios-cmake)
 - 只额外提供一个 C bridge（`shim/`），解决上游 `pm3_open()` 失败时 `exit()` 的问题，并支持**实时流式输出**
 - 一次编译，桌面 / Android / iOS 通用：全部静态链接，无运行时 `.so` / `.dll` 依赖
+- 自带 `examples/minimal-app`：一个依赖本插件的最小 Tauri 应用，CI 会在五个平台分别编译它，
+  只有全部通过才发布 release
 
 ## 支持矩阵
 
@@ -48,7 +51,8 @@
 
 `build.rs` 做的事情：
 
-1. 直接对 `proxmark3/client/experimental_lib` 执行 `cmake -S ... -B ...`，打开
+1. 先把 `patch/proxmark3/` 里的兼容文件覆盖到 submodule（构建脚本退出时自动还原），再对
+   `proxmark3/client/experimental_lib` 执行 `cmake -S ... -B ...`，打开
    `SKIPBT/SKIPPYTHON/SKIPREADLINE/SKIPLINENOISE/SKIPGD`，bzip2 / lz4 走 `EMBED_*`；
 2. 通过 `-DCMAKE_PROJECT_INCLUDE=cmake/pm3x_configure.cmake` 注入少量**编译器选项**：
    - Android x86/x86_64 的 `cipher_bs_avx*.c` 需要 `-mavx2` / `-mavx512f`（上游只给非 Android 加了 target pragma）；
@@ -74,7 +78,7 @@
 ```toml
 # 应用 crate 的 Cargo.toml
 [dependencies]
-tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.1" }
+tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.3" }
 # 或者从 GitHub Release 下载 .crate 后本地 path 依赖
 ```
 
@@ -221,10 +225,35 @@ cargo test --target x86_64-pc-windows-gnu # 离线模式端到端测试，无需
 `tests/offline.rs` 会在没有 Proxmark3 硬件的情况下打开离线会话，执行 `hw version`、`data -h`
 和一条不存在的命令，验证「编译 → 链接 → 命令解析 → 输出抓取」，并校验流式回调确实收到了输出。
 
+### 最小测试程序（`examples/minimal-app`）
+
+一个刻意做小的 Tauri 2 应用，通过 path 依赖本插件，唯一目的就是验证「插件能被真正打包进 Tauri 应用」：
+
+- 前端是静态的 `dist/index.html`，通过 Tauri IPC 调用 `pm3_version`；
+- `src/lib.rs` 注册 `tauri_plugin_proxmark3::init()`、暴露 `pm3_version`，并在 `setup()` 里调用
+  `client::version()` 和 `client::execute("hw version")`（桌面端）；
+- `capabilities/default.json` 授权 `proxmark3:default`。
+
+```bash
+# 桌面
+cargo build --release --manifest-path examples/minimal-app/Cargo.toml
+# Windows：GNU 工具链必须同时作为 host toolchain
+cargo +stable-x86_64-pc-windows-gnu build --release --target x86_64-pc-windows-gnu \
+  --manifest-path examples/minimal-app/Cargo.toml
+# Android（cdylib）
+cd examples/minimal-app && cargo ndk -t arm64-v8a build --release --lib
+# iOS（staticlib / cdylib）
+cd examples/minimal-app && cargo build --release --target aarch64-apple-ios-sim --lib
+```
+
+可复用工作流 `.github/workflows/smoke-app.yml` 会在 Linux / macOS / Windows / Android / iOS 上
+执行上述命令；`ci.yml` 每次 push 都会跑，`release.yml` 把它列进 `publish.needs`，
+因此**只有五端全部编译通过才会发布 release**。
+
 ## CI / 发布
 
-- `.github/workflows/ci.yml`：Linux / macOS / Windows(GNU) 构建 + 测试；Android 三个 ABI；iOS 模拟器与真机；`cargo package` 校验
-- `.github/workflows/release.yml`：推送 `v*` tag 时自动构建并发布：
+- `.github/workflows/ci.yml`：Linux / macOS / Windows(GNU) 构建 + 测试；Android 三个 ABI；iOS 模拟器与真机；`cargo package` 校验；五端最小应用（`smoke-app.yml`）
+- `.github/workflows/release.yml`：推送 `v*` tag 时自动构建并发布（需 `smoke-app` 五端全部通过）：
   - `tauri-plugin-proxmark3-<version>.crate`：包含该 Proxmark3 commit 源码的 Rust 插件
   - `proxmark3-firmware-<pm3short>.zip`：`PM3BOOTROM.elf` + 各平台 `fullimage.elf`
     （`PM3RDV4`、`PM3RDV4_BTADDON`、`PM3GENERIC`、`PM3GENERIC_256`、`PM3ICOPYX_FLASH`、`PM3ULTIMATE`、`PM5`、`PM5_BWM`），
@@ -234,8 +263,8 @@ cargo test --target x86_64-pc-windows-gnu # 离线模式端到端测试，无需
   - `manifest.json`：机器可读清单，含 `proxmark3.commit` / `short_commit` / `commit_date` / `version`、固件列表以及每个资产的 SHA256
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.3
+git push origin v0.2.3
 ```
 
 > 固件默认不启用 standalone 模式（`STANDALONE=`）；需要各 standalone 变体时可用上游
@@ -262,7 +291,8 @@ git push origin v0.2.1
 ## 目录结构
 
 ```
-proxmark3/          git submodule（上游仓库，构建时不修改）
+proxmark3/          git submodule（上游仓库，每次构建后还原）
+patch/              少量上游文件的兼容副本，只在 CMake 构建期间替换进去
 cmake/              仅一个 CMAKE_PROJECT_INCLUDE 注入文件（不定义工程/目标）
 shim/               C bridge：open/execute/stream，以及 iOS 的 system() 替代头
 src/                Rust 插件：Tauri 命令 + FFI 封装

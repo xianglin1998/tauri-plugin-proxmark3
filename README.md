@@ -11,14 +11,17 @@ Latest build artifacts (`.crate`, firmware, client resources):
 
 - Pins Proxmark3 with a **git submodule** (`proxmark3/`)
 - Uses the upstream `client/experimental_lib` (the `libpm3` exporting `pm3.h`) **directly** as a
-  CMake project: nothing is copied, no upstream CMake file or source file is modified, and no
-  third-party library is vendored into this repository
+  CMake project and never leaves the submodule modified: a small set of compatibility files in
+  `patch/proxmark3/` is copied in only while CMake runs and restored afterwards; no third-party
+  library is vendored into this repository
 - bzip2 / lz4 are downloaded and compiled at build time by the upstream `EMBED_BZIP2` / `EMBED_LZ4`
   ExternalProjects
 - iOS cross-compilation uses [leetal/ios-cmake](https://github.com/leetal/ios-cmake)
 - Adds only a small C bridge (`shim/`) that works around `pm3_open()` calling `exit()` on failure
   and provides **real-time streaming output**
 - One build for desktop / Android / iOS: everything is statically linked, no runtime `.so` / `.dll`
+- Ships `examples/minimal-app`, a tiny Tauri app that depends on the plugin and is built on all
+  five platforms in CI; a release is only published when every platform compiled
 
 ## Support matrix
 
@@ -53,7 +56,9 @@ Latest build artifacts (`.crate`, firmware, client resources):
 
 What `build.rs` does:
 
-1. runs `cmake -S proxmark3/client/experimental_lib -B <build>` with
+1. copies the compatibility files from `patch/proxmark3/` over the submodule (they are restored
+   when the build script exits), then runs
+   `cmake -S proxmark3/client/experimental_lib -B <build>` with
    `SKIPBT/SKIPPYTHON/SKIPREADLINE/SKIPLINENOISE/SKIPGD` and `EMBED_*` for bzip2 / lz4;
 2. injects a few **compiler options** through
    `-DCMAKE_PROJECT_INCLUDE=cmake/pm3x_configure.cmake`:
@@ -86,7 +91,7 @@ What `build.rs` does:
 ```toml
 # the application crate's Cargo.toml
 [dependencies]
-tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.1" }
+tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.3" }
 # or download the .crate from a GitHub Release and use a path dependency
 ```
 
@@ -235,11 +240,38 @@ cargo test --target x86_64-pc-windows-gnu # offline end-to-end test, no hardware
 `data -h` and an unknown command, and checks the whole chain “compile → link → command parser →
 output capture”, including that the streaming callback really receives output.
 
+### Minimal app (`examples/minimal-app`)
+
+A deliberately tiny Tauri 2 application that depends on the plugin through a path dependency. Its
+only purpose is to prove that the plugin can be packaged into a real app:
+
+- the frontend is a static `dist/index.html` that calls `pm3_version` through the Tauri IPC layer;
+- `src/lib.rs` registers `tauri_plugin_proxmark3::init()`, exposes `pm3_version`, and in `setup()`
+  calls `client::version()` and `client::execute("hw version")` (desktop);
+- `capabilities/default.json` grants `proxmark3:default`.
+
+```bash
+# desktop
+cargo build --release --manifest-path examples/minimal-app/Cargo.toml
+# Windows: the GNU toolchain has to be the host toolchain as well
+cargo +stable-x86_64-pc-windows-gnu build --release --target x86_64-pc-windows-gnu \
+  --manifest-path examples/minimal-app/Cargo.toml
+# Android (cdylib)
+cd examples/minimal-app && cargo ndk -t arm64-v8a build --release --lib
+# iOS (staticlib / cdylib)
+cd examples/minimal-app && cargo build --release --target aarch64-apple-ios-sim --lib
+```
+
+The reusable workflow `.github/workflows/smoke-app.yml` runs exactly these commands for Linux,
+macOS, Windows, Android and iOS. `ci.yml` runs it on every push and `release.yml` lists it in
+`publish.needs`, so **no release is created unless all five platforms compile**.
+
 ## CI / release
 
 - `.github/workflows/ci.yml`: Linux / macOS / Windows(GNU) build + test; three Android ABIs; iOS
-  simulator and device; `cargo package` check
-- `.github/workflows/release.yml`: triggered by a `v*` tag, builds and publishes:
+  simulator and device; `cargo package` check; the five-platform minimal app (`smoke-app.yml`)
+- `.github/workflows/release.yml`: triggered by a `v*` tag, builds and publishes (only after
+  `smoke-app` succeeded on all five platforms):
   - `tauri-plugin-proxmark3-<version>.crate`: the Rust plugin with the pinned Proxmark3 sources
   - `proxmark3-firmware-<pm3short>.zip`: `PM3BOOTROM.elf` plus one `fullimage.elf` per platform
     (`PM3RDV4`, `PM3RDV4_BTADDON`, `PM3GENERIC`, `PM3GENERIC_256`, `PM3ICOPYX_FLASH`,
@@ -252,8 +284,8 @@ output capture”, including that the streaming callback really receives output.
     `commit_date` / `version`, the firmware matrix and the SHA256 of every asset
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.3
+git push origin v0.2.3
 ```
 
 > Firmware is built without a standalone mode (`STANDALONE=`); use the upstream
@@ -285,7 +317,8 @@ git push origin v0.2.1
 ## Repository layout
 
 ```
-proxmark3/          git submodule (upstream repository, never modified by the build)
+proxmark3/          git submodule (upstream repository, restored after every build)
+patch/              compatibility copies of a few upstream files, applied only while CMake runs
 cmake/              a single CMAKE_PROJECT_INCLUDE file (no project, no targets)
 shim/               C bridge: open/execute/stream, plus the iOS system() replacement header
 src/                Rust plugin: Tauri commands + FFI wrapper
