@@ -221,13 +221,23 @@ cargo test --target x86_64-pc-windows-gnu # 离线模式端到端测试，无需
 ## CI / 发布
 
 - `.github/workflows/ci.yml`：Linux / macOS / Windows(GNU) 构建 + 测试；Android 三个 ABI；iOS 模拟器与真机；`cargo package` 校验
-- `.github/workflows/release.yml`：推送 `v*` tag 时，把包含 proxmark3 源码的 crate 打包成 `.crate`
-  并自动发布到 GitHub Release
+- `.github/workflows/release.yml`：推送 `v*` tag 时自动构建并发布：
+  - `tauri-plugin-proxmark3-<version>.crate`：包含该 Proxmark3 commit 源码的 Rust 插件
+  - `proxmark3-firmware-<pm3short>.zip`：`PM3BOOTROM.elf` + 各平台 `fullimage.elf`
+    （`PM3RDV4`、`PM3RDV4_BTADDON`、`PM3GENERIC`、`PM3GENERIC_256`、`PM3ICOPYX_FLASH`、`PM3ULTIMATE`、`PM5`、`PM5_BWM`），
+    由上游 `make PLATFORM=... PLATFORM_EXTRAS=... fullimage` 构建，ELF 名称即「平台 + 可选件」组合
+  - `proxmark3-client-resources-<pm3short>.zip`：`cmdscripts / dictionaries / lualibs / luascripts / pyscripts / resources`，
+    解压后按 `share/proxmark3/` 布局放置
+  - `manifest.json`：机器可读清单，含 `proxmark3.commit` / `short_commit` / `commit_date` / `version`、固件列表以及每个资产的 SHA256
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
+
+> 固件默认不启用 standalone 模式（`STANDALONE=`）；需要各 standalone 变体时可用上游
+> `tools/build_all_firmwares.sh`。所有产物都来自同一个 Proxmark3 submodule commit，
+> 自动化脚本可用 `manifest.json` 的 `proxmark3.commit` 做版本匹配。
 
 > `cargo package` 默认不会打包 git submodule 的内容，所以发布流程会把源码树复制到临时目录再打包，
 > 这样发布出去的 `.crate` 是自包含、可离线构建的。

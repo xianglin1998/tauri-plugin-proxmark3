@@ -6,15 +6,21 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish (for example v0.1.0)"
+        description: "Tag to publish (for example v0.2.1)"
         required: true
 
 permissions:
   contents: write
 
+env:
+  PROXMARK3_REPO: "https://github.com/RfidResearchGroup/proxmark3"
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Rust crate: the plugin with the pinned Proxmark3 sources inside.
+  # ---------------------------------------------------------------------------
   crate:
-    name: Build and publish the Rust crate
+    name: Crate
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -63,23 +69,381 @@ jobs:
           cd /tmp/pkg
           cargo package --no-verify --allow-dirty
           CRATE=$(ls target/package/*.crate | head -n1)
-          echo "crate=$(realpath "$CRATE")" >> "$GITHUB_OUTPUT"
+          cp "$CRATE" /tmp/crate.crate
           echo "name=$(basename "$CRATE")" >> "$GITHUB_OUTPUT"
           ls -la target/package
 
-      - name: Upload crate as a workflow artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.name }}
-          path: ${{ steps.package.outputs.crate }}
+          name: crate
+          path: /tmp/crate.crate
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Firmware: bootrom once, then armsrc for every platform / extras combination.
+  # ---------------------------------------------------------------------------
+  bootrom:
+    name: Firmware / bootrom
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make gcc-arm-none-eabi libnewlib-dev
+
+      - name: Build bootrom
+        run: make -j"$(nproc)" bootrom
+
+      - name: Stage
+        run: |
+          mkdir -p dist
+          cp bootrom/obj/bootrom.elf dist/PM3BOOTROM.elf
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-bootrom
+          path: dist/PM3BOOTROM.elf
+          if-no-files-found: error
+
+  firmware:
+    name: Firmware / ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: PM3RDV4
+            platform: PM3RDV4
+            extras: ""
+            size: ""
+            skips: ""
+          - name: PM3RDV4_BTADDON
+            platform: PM3RDV4
+            extras: "BTADDON"
+            size: ""
+            skips: ""
+          - name: PM3GENERIC
+            platform: PM3GENERIC
+            extras: ""
+            size: ""
+            skips: ""
+          - name: PM3GENERIC_256
+            platform: PM3GENERIC
+            extras: ""
+            size: "256"
+            skips: "SKIP_HITAG=1 SKIP_LEGICRF=1 SKIP_FELICA=1 SKIP_EM4x50=1 SKIP_EM4x70=1 SKIP_ISO14443b=1 SKIP_NFCBARCODE=1 SKIP_ZX8211=1 SKIP_LF=1 SKIP_DESFIRE_SIM=1"
+          - name: PM3ICOPYX_FLASH
+            platform: PM3ICOPYX
+            extras: "FLASH"
+            size: ""
+            skips: ""
+          - name: PM3ULTIMATE
+            platform: PM3ULTIMATE
+            extras: ""
+            size: ""
+            skips: ""
+          - name: PM5
+            platform: PM5
+            extras: ""
+            size: ""
+            skips: ""
+          - name: PM5_BWM
+            platform: PM5
+            extras: "BWM"
+            size: ""
+            skips: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make gcc-arm-none-eabi libnewlib-dev
+
+      - name: Build ${{ matrix.name }}
+        run: |
+          make -j"$(nproc)" \
+            PLATFORM=${{ matrix.platform }} \
+            PLATFORM_EXTRAS="${{ matrix.extras }}" \
+            ${{ matrix.size != '' && format('PLATFORM_SIZE={0}', matrix.size) || '' }} \
+            ${{ matrix.skips }} \
+            STANDALONE= \
+            fullimage
+
+      - name: Stage
+        run: |
+          mkdir -p dist
+          cp armsrc/obj/fullimage.elf "dist/${{ matrix.name }}.elf"
+          {
+            echo "name=${{ matrix.name }}"
+            echo "platform=${{ matrix.platform }}"
+            echo "extras=${{ matrix.extras }}"
+            echo "size=${{ matrix.size }}"
+            echo "skips=${{ matrix.skips }}"
+          } > "dist/${{ matrix.name }}.meta"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.name }}
+          path: |
+            dist/${{ matrix.name }}.elf
+            dist/${{ matrix.name }}.meta
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Client resources: what the client expects under ../share/proxmark3/.
+  # ---------------------------------------------------------------------------
+  resources:
+    name: Client resources
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Stage resources
+        run: |
+          mkdir -p dist/share/proxmark3
+          for dir in cmdscripts dictionaries lualibs luascripts pyscripts resources; do
+            if [ -d "proxmark3/client/$dir" ]; then
+              cp -a "proxmark3/client/$dir" "dist/share/proxmark3/"
+            else
+              echo "missing proxmark3/client/$dir"
+              exit 1
+            fi
+          done
+          find dist -type f | wc -l
+          du -sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-resources
+          path: dist/share
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Publish: zip firmware + resources, describe the Proxmark3 commit, release.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish release
+    needs: [crate, bootrom, firmware, resources]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Collect version information
+        id: versions
+        run: |
+          PM3_COMMIT=$(git -C proxmark3 rev-parse HEAD)
+          PM3_SHORT=${PM3_COMMIT:0:10}
+          PM3_DATE=$(git -C proxmark3 log -1 --format=%cI)
+          PM3_SUBJECT=$(git -C proxmark3 log -1 --format=%s)
+          PM3_VERSION=$( (cd proxmark3 && sh tools/mkversion.sh --short) 2>/dev/null | tr -d '\r\n' || true )
+          PLUGIN_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+
+          echo "pm3_commit=$PM3_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "pm3_short=$PM3_SHORT" >> "$GITHUB_OUTPUT"
+          echo "pm3_date=$PM3_DATE" >> "$GITHUB_OUTPUT"
+          echo "pm3_subject=$PM3_SUBJECT" >> "$GITHUB_OUTPUT"
+          echo "pm3_version=$PM3_VERSION" >> "$GITHUB_OUTPUT"
+          echo "plugin_version=$PLUGIN_VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Proxmark3 commit: $PM3_COMMIT"
+          echo "Proxmark3 version: $PM3_VERSION"
+          echo "Plugin version: $PLUGIN_VERSION"
+
+      - name: Build release assets
+        run: |
+          mkdir -p release
+          cp dist/*.crate "release/tauri-plugin-proxmark3-${{ steps.versions.outputs.plugin_version }}.crate"
+          ( cd dist && zip -q -j "../release/proxmark3-firmware-${{ steps.versions.outputs.pm3_short }}.zip" *.elf )
+          ( cd dist && zip -q -r "../release/proxmark3-client-resources-${{ steps.versions.outputs.pm3_short }}.zip" share )
+          ls -la release
+
+      - name: Write manifest.json
+        env:
+          PM3_COMMIT: ${{ steps.versions.outputs.pm3_commit }}
+          PM3_SHORT: ${{ steps.versions.outputs.pm3_short }}
+          PM3_DATE: ${{ steps.versions.outputs.pm3_date }}
+          PM3_SUBJECT: ${{ steps.versions.outputs.pm3_subject }}
+          PM3_VERSION: ${{ steps.versions.outputs.pm3_version }}
+          PLUGIN_VERSION: ${{ steps.versions.outputs.plugin_version }}
+          PROXMARK3_REPO: ${{ env.PROXMARK3_REPO }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          release = Path("release")
+          dist = Path("dist")
+
+          firmware = []
+          for meta in sorted(dist.glob("*.meta")):
+              values = {}
+              for line in meta.read_text().splitlines():
+                  if "=" in line:
+                      key, value = line.split("=", 1)
+                      values[key] = value
+              firmware.append(
+                  {
+                      "file": f"{values.get('name', meta.stem)}.elf",
+                      "name": values.get("name", meta.stem),
+                      "platform": values.get("platform", ""),
+                      "extras": values.get("extras", ""),
+                      "size_kb": int(values["size"]) if values.get("size") else None,
+                      "skips": values.get("skips", "").split(),
+                  }
+              )
+
+          assets = []
+          for path in sorted(release.iterdir()):
+              if not path.is_file():
+                  continue
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              assets.append(
+                  {
+                      "name": path.name,
+                      "size": path.stat().st_size,
+                      "sha256": digest,
+                  }
+              )
+
+          manifest = {
+              "schema_version": 1,
+              "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "plugin": {
+                  "name": "tauri-plugin-proxmark3",
+                  "version": os.environ["PLUGIN_VERSION"],
+                  "crate": f"tauri-plugin-proxmark3-{os.environ['PLUGIN_VERSION']}.crate",
+              },
+              "proxmark3": {
+                  "repository": os.environ["PROXMARK3_REPO"],
+                  "commit": os.environ["PM3_COMMIT"],
+                  "short_commit": os.environ["PM3_SHORT"],
+                  "commit_date": os.environ["PM3_DATE"],
+                  "commit_subject": os.environ["PM3_SUBJECT"],
+                  "version": os.environ["PM3_VERSION"],
+              },
+              "firmware": firmware,
+              "client_resources": {
+                  "file": f"proxmark3-client-resources-{os.environ['PM3_SHORT']}.zip",
+                  "unpack_to": "share/proxmark3",
+                  "directories": [
+                      "cmdscripts",
+                      "dictionaries",
+                      "lualibs",
+                      "luascripts",
+                      "pyscripts",
+                      "resources",
+                  ],
+              },
+              "assets": assets,
+          }
+
+          (release / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Write release notes
+        env:
+          PM3_COMMIT: ${{ steps.versions.outputs.pm3_commit }}
+          PM3_SHORT: ${{ steps.versions.outputs.pm3_short }}
+          PM3_DATE: ${{ steps.versions.outputs.pm3_date }}
+          PM3_SUBJECT: ${{ steps.versions.outputs.pm3_subject }}
+          PM3_VERSION: ${{ steps.versions.outputs.pm3_version }}
+          PLUGIN_VERSION: ${{ steps.versions.outputs.plugin_version }}
+        run: |
+          {
+            echo "## Proxmark3"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| commit | \`${PM3_COMMIT}\` |"
+            echo "| short | \`${PM3_SHORT}\` |"
+            echo "| commit date | ${PM3_DATE} |"
+            echo "| client version | \`${PM3_VERSION}\` |"
+            echo "| repository | ${{ env.PROXMARK3_REPO }} |"
+            echo ""
+            echo "本 release 的全部产物（crate / 固件 / 客户端资源）都基于同一个 Proxmark3 commit；"
+            echo "自动化流程请读取 \`manifest.json\` 中的 \`proxmark3.commit\`、\`assets[].sha256\` 与 \`firmware[]\`。"
+            echo ""
+            echo "## 资产"
+            echo ""
+            echo "| 文件 | 内容 |"
+            echo "| --- | --- |"
+            echo "| \`tauri-plugin-proxmark3-${PLUGIN_VERSION}.crate\` | Rust 插件，内含该 commit 的 proxmark3 client 源码 |"
+            echo "| \`proxmark3-firmware-${PM3_SHORT}.zip\` | bootrom + 各平台 armsrc fullimage（见下表） |"
+            echo "| \`proxmark3-client-resources-${PM3_SHORT}.zip\` | cmdscripts / dictionaries / lualibs / luascripts / pyscripts / resources |"
+            echo "| \`manifest.json\` | 机器可读的版本、commit、固件列表与 SHA256 |"
+            echo ""
+            echo "## 固件（firmware/）"
+            echo ""
+            echo "| ELF | PLATFORM | PLATFORM_EXTRAS | 说明 |"
+            echo "| --- | --- | --- | --- |"
+            echo "| \`PM3BOOTROM.elf\` | – | – | bootrom |"
+            for meta in dist/*.meta; do
+              name=""
+              platform=""
+              extras=""
+              size=""
+              skips=""
+              while IFS='=' read -r key value; do
+                case "$key" in
+                  name) name="$value" ;;
+                  platform) platform="$value" ;;
+                  extras) extras="$value" ;;
+                  size) size="$value" ;;
+                  skips) skips="$value" ;;
+                esac
+              done < "$meta"
+              note=""
+              if [ -n "$size" ]; then note="${size}KB 版本"; fi
+              if [ -n "$skips" ]; then note="${note}带 SKIP_* 裁剪"; fi
+              extras_display="${extras:--}"
+              echo "| \`${name}.elf\` | ${platform} | ${extras_display} | ${note} |"
+            done
+            echo ""
+            echo "## 客户端资源（proxmark3-client-resources-${PM3_SHORT}.zip）"
+            echo ""
+            echo "解压后得到 \`share/proxmark3/{cmdscripts,dictionaries,lualibs,luascripts,pyscripts,resources}\`，"
+            echo "放到应用可执行文件目录的 \`../share/proxmark3/\`（proxmark3 client 的 \`PM3_SHARE_RELPATH\`）即可。"
+            echo ""
+            echo "## 说明"
+            echo ""
+            echo "- 固件由 \`make PLATFORM=... PLATFORM_EXTRAS=... fullimage\` 构建，ELF 名称即平台与可选件组合；"
+            echo "- 默认未启用 standalone 模式（\`STANDALONE=\`）；需要时可用上游脚本 \`tools/build_all_firmwares.sh\` 构建；"
+            echo "- ARM 工具链：ubuntu 的 \`gcc-arm-none-eabi\`。"
+          } > release-notes.md
+          cat release-notes.md
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: "${{ github.event.inputs.tag || github.ref_name }} (Proxmark3 ${{ steps.versions.outputs.pm3_short }})"
+          body_path: release-notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
-          files: ${{ steps.package.outputs.crate }}
+          generate_release_notes: false
+          files: release/*
