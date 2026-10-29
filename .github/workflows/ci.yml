@@ -229,3 +229,10 @@ jobs:
           name: crate
           path: /tmp/pkg/target/package/*.crate
           if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Minimal Tauri app depending on the plugin, built for every platform.
+  # ---------------------------------------------------------------------------
+  smoke-app:
+    name: Smoke app
+    uses: ./.github/workflows/smoke-app.yml

@@ -1,5 +1,5 @@
 # Rust / Cargo
-/target
+target/
 **/*.rs.bk
 *.crate
 
@@ -8,6 +8,9 @@
 
 # Proxmark3 client session data created by local test runs
 /.proxmark3
+
+# Tauri mobile projects generated on demand
+/examples/minimal-app/gen
 
 # Node
 node_modules

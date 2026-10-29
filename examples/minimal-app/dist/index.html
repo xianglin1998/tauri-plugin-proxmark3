@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tauri-plugin-proxmark3 minimal app</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        color: #1f2933;
+      }
+      code {
+        background: #eef2f7;
+        padding: 0.15rem 0.35rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>tauri-plugin-proxmark3</h1>
+    <p>Proxmark3 client version: <code id="version">loading…</code></p>
+    <p>This window only proves that the plugin links and runs in a Tauri app.</p>
+    <script>
+      // withGlobalTauri is enabled in tauri.conf.json for this smoke test.
+      window.addEventListener('DOMContentLoaded', () => {
+        const target = document.getElementById('version');
+        if (!window.__TAURI__) {
+          target.textContent = 'Tauri IPC unavailable';
+          return;
+        }
+        window.__TAURI__.core
+          .invoke('pm3_version')
+          .then((version) => {
+            target.textContent = version;
+          })
+          .catch((error) => {
+            target.textContent = String(error);
+          });
+      });
+    </script>
+  </body>
+</html>

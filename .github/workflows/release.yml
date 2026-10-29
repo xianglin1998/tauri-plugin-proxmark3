@@ -48,6 +48,8 @@ jobs:
             --exclude /.proxmark3 \
             --exclude /_temp \
             --exclude /target \
+            --exclude /examples/minimal-app/target \
+            --exclude /examples/minimal-app/gen \
             --exclude /node_modules \
             --exclude /proxmark3/armsrc \
             --exclude /proxmark3/bootrom \
@@ -233,11 +235,19 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # Minimal Tauri app depending on the plugin, built on all five platforms.
+  # Publishing waits for it, so a broken platform blocks the release.
+  # ---------------------------------------------------------------------------
+  smoke-app:
+    name: Smoke app
+    uses: ./.github/workflows/smoke-app.yml
+
+  # ---------------------------------------------------------------------------
   # Publish: zip firmware + resources, describe the Proxmark3 commit, release.
   # ---------------------------------------------------------------------------
   publish:
     name: Publish release
-    needs: [crate, bootrom, firmware, resources]
+    needs: [crate, bootrom, firmware, resources, smoke-app]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,19 @@
+[package]
+name = "minimal-app"
+version = "0.1.0"
+description = "Minimal Tauri app used to smoke-test tauri-plugin-proxmark3 on every platform"
+edition = "2021"
+publish = false
+
+[lib]
+name = "minimal_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-proxmark3 = { path = "../.." }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
