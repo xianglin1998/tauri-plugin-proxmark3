@@ -97,12 +97,13 @@ jobs:
           sudo apt-get install -y make gcc-arm-none-eabi libnewlib-dev
 
       - name: Build bootrom
+        working-directory: proxmark3
         run: make -j"$(nproc)" bootrom
 
       - name: Stage
         run: |
           mkdir -p dist
-          cp bootrom/obj/bootrom.elf dist/PM3BOOTROM.elf
+          cp proxmark3/bootrom/obj/bootrom.elf dist/PM3BOOTROM.elf
 
       - uses: actions/upload-artifact@v4
         with:
@@ -169,6 +170,7 @@ jobs:
           sudo apt-get install -y make gcc-arm-none-eabi libnewlib-dev
 
       - name: Build ${{ matrix.name }}
+        working-directory: proxmark3
         run: |
           make -j"$(nproc)" \
             PLATFORM=${{ matrix.platform }} \
@@ -181,7 +183,7 @@ jobs:
       - name: Stage
         run: |
           mkdir -p dist
-          cp armsrc/obj/fullimage.elf "dist/${{ matrix.name }}.elf"
+          cp proxmark3/armsrc/obj/fullimage.elf "dist/${{ matrix.name }}.elf"
           {
             echo "name=${{ matrix.name }}"
             echo "platform=${{ matrix.platform }}"
