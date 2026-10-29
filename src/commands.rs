@@ -78,3 +78,9 @@ pub fn status() -> SessionInfo {
 pub fn version() -> String {
     bridge::version()
 }
+
+/// Writes bytes to the client stdin while a command is running.
+#[tauri::command]
+pub fn input(data: String) -> Result<(), Error> {
+    bridge::send_input(&data)
+}

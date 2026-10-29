@@ -343,6 +343,18 @@
           "markdownDescription": "Denies the execute_stream command without any pre-configured scope."
         },
         {
+          "description": "Enables the input command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-input",
+          "markdownDescription": "Enables the input command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the input command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-input",
+          "markdownDescription": "Denies the input command without any pre-configured scope."
+        },
+        {
           "description": "Enables the status command without any pre-configured scope.",
           "type": "string",
           "const": "allow-status",
@@ -367,10 +379,10 @@
           "markdownDescription": "Denies the version command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`",
+          "description": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`\n- `allow-input`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`"
+          "markdownDescription": "Default permissions for the Proxmark3 plugin\n#### This default permission set includes:\n\n- `allow-connect`\n- `allow-disconnect`\n- `allow-execute`\n- `allow-execute-stream`\n- `allow-status`\n- `allow-version`\n- `allow-input`"
         }
       ]
     }

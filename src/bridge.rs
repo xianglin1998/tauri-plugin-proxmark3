@@ -36,6 +36,7 @@ extern "C" {
         callback: Option<ChunkCallback>,
         userdata: *mut c_void,
     ) -> c_int;
+    fn pm3x_send_input(data: *const c_char) -> c_int;
     fn pm3x_free(ptr: *mut c_char);
     fn pm3x_last_error() -> *const c_char;
 }
@@ -92,6 +93,22 @@ pub fn status() -> SessionInfo {
 /// Client version baked into the library.
 pub fn version() -> String {
     unsafe { cstr_to_string(pm3x_version()) }
+}
+
+/// Writes bytes to the client stdin.  This does not take the command mutex:
+/// the whole point is to feed a command that is currently holding it.
+pub fn send_input(data: &str) -> Result<(), Error> {
+    let data_c = cstring(data)?;
+    let status = unsafe { pm3x_send_input(data_c.as_ptr()) };
+    if status != 0 {
+        let detail = last_error();
+        return Err(Error::client(if detail.is_empty() {
+            "cannot write to the client stdin".to_string()
+        } else {
+            detail
+        }));
+    }
+    Ok(())
 }
 
 /// Opens a session.

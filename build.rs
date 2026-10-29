@@ -26,6 +26,7 @@
 
 use std::collections::BTreeSet;
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -36,6 +37,7 @@ const COMMANDS: &[&str] = &[
     "execute_stream",
     "status",
     "version",
+    "input",
 ];
 
 fn main() {
@@ -61,6 +63,7 @@ fn main() {
         "proxmark3/include",
         "proxmark3/common_fpga",
         "proxmark3/tools/mkversion.sh",
+        "patch/proxmark3",
     ] {
         println!("cargo:rerun-if-changed={change}");
     }
@@ -93,6 +96,11 @@ fn main() {
             manifest_dir.join("proxmark3").display()
         );
     }
+
+    // Apply the small set of compatibility patches to the upstream client
+    // while CMake runs, then restore the submodule files. The patches are kept
+    // in this repository so the Proxmark3 submodule itself stays upstream.
+    let _patched_sources = SourcePatches::apply(&manifest_dir);
 
     // CMake object paths inside rustc's target directory can exceed the 260
     // character Windows limit, so the CMake build tree lives on a short path.
@@ -297,6 +305,20 @@ fn main() {
         println!("cargo:rustc-link-search=native={}", dir.display());
     }
 
+    // Rustc only searches explicit -L directories for `static=` libraries.
+    // The MSYS2 bzip2/lz4/winpthread static archives live next to the MinGW
+    // toolchain, so add that lib directory for the final link as well.
+    if target_os == "windows" {
+        if let Some(mingw) = mingw_bin_dir() {
+            if let Some(root) = mingw.parent() {
+                println!(
+                    "cargo:rustc-link-search=native={}",
+                    root.join("lib").display()
+                );
+            }
+        }
+    }
+
     for lib in system_libs(&build_dir, &target_os) {
         if let Some(framework) = lib.strip_prefix("framework:") {
             println!("cargo:rustc-link-lib=framework={framework}");
@@ -355,7 +377,10 @@ fn system_libs(build_dir: &Path, target_os: &str) -> Vec<String> {
         "windows" => {
             // MSYS2 UCRT64 packages provide bzip2 and lz4 (the upstream
             // ExternalProject steps need a POSIX shell and do not run on cmd).
-            libs.extend(["ws2_32", "pthread", "bz2", "lz4"].map(str::to_string));
+            // Link the static archives explicitly so the release executable
+            // does not depend on libbz2-1.dll, liblz4.dll or libwinpthread-1.dll.
+            libs.extend(["ws2_32"].map(str::to_string));
+            libs.extend(["static=pthread", "static=bz2", "static=lz4"].map(str::to_string));
         }
         "android" => libs.extend(["m"].map(str::to_string)),
         "ios" | "macos" => {
@@ -373,7 +398,7 @@ fn system_libs(build_dir: &Path, target_os: &str) -> Vec<String> {
     if cmake_cache_has_library(build_dir, "ZLIB_LIBRARY")
         || cmake_cache_has_library(build_dir, "ZLIB_LIBRARY_RELEASE")
     {
-        libs.push("z".into());
+        libs.push(if target_os == "windows" { "static=z" } else { "z" }.into());
     }
     libs
 }
@@ -520,6 +545,57 @@ fn path_with_prefix(prefix: &[PathBuf]) -> std::ffi::OsString {
     let mut paths: Vec<PathBuf> = prefix.to_vec();
     paths.extend(env::split_paths(&env::var_os("PATH").unwrap_or_default()));
     env::join_paths(paths).expect("valid PATH")
+}
+
+// ---------------------------------------------------------------------------
+// Upstream source patches
+// ---------------------------------------------------------------------------
+
+/// Files copied from `patch/proxmark3/` into the submodule for the duration of
+/// the CMake build. They keep the submodule checkout itself untouched.
+const SOURCE_PATCHES: &[&str] = &[
+    "client/deps/hardnested/hardnested_bf_core.h",
+    "client/experimental_lib/CMakeLists.txt",
+    "client/src/loclass/cipher_bs_avx2.c",
+    "client/src/loclass/cipher_bs_avx512.c",
+    "client/src/util.c",
+];
+
+struct SourcePatches {
+    originals: Vec<(PathBuf, Vec<u8>)>,
+}
+
+impl SourcePatches {
+    fn apply(manifest_dir: &Path) -> Self {
+        let mut originals = Vec::new();
+        for relative in SOURCE_PATCHES {
+            let source = manifest_dir.join("patch/proxmark3").join(relative);
+            if !source.exists() {
+                continue;
+            }
+            let target = manifest_dir.join("proxmark3").join(relative);
+            let original = fs::read(&target)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", target.display()));
+            let replacement = fs::read(&source)
+                .unwrap_or_else(|error| panic!("failed to read {}: {error}", source.display()));
+            if original != replacement {
+                fs::write(&target, &replacement)
+                    .unwrap_or_else(|error| panic!("failed to patch {}: {error}", target.display()));
+            }
+            originals.push((target, original));
+        }
+        Self { originals }
+    }
+}
+
+impl Drop for SourcePatches {
+    fn drop(&mut self) {
+        for (target, original) in &self.originals {
+            if let Err(error) = fs::write(target, original) {
+                eprintln!("warning: failed to restore {}: {error}", target.display());
+            }
+        }
+    }
 }
 
 fn run(command: &mut Command, what: &str) {

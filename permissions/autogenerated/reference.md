@@ -10,6 +10,7 @@ Default permissions for the Proxmark3 plugin
 - `allow-execute-stream`
 - `allow-status`
 - `allow-version`
+- `allow-input`
 
 ## Permission Table
 
@@ -120,6 +121,32 @@ Enables the execute_stream command without any pre-configured scope.
 <td>
 
 Denies the execute_stream command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`proxmark3:allow-input`
+
+</td>
+<td>
+
+Enables the input command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`proxmark3:deny-input`
+
+</td>
+<td>
+
+Denies the input command without any pre-configured scope.
 
 </td>
 </tr>

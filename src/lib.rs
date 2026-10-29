@@ -107,6 +107,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::execute_stream,
             commands::status,
             commands::version,
+            commands::input,
         ])
         .setup(|app, _api| {
             let sandboxed = cfg!(any(target_os = "android", target_os = "ios"));
