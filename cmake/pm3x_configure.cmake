@@ -68,12 +68,11 @@ function(pm3x_relax_warnings)
             pm3rrg_rdv4_whereami)
         if(TARGET ${pm3x_target})
             target_compile_options(${pm3x_target} PRIVATE -Wno-error)
-            # Android clang emits non-PIC __cpu_model relocations for the
-            # runtime CPU dispatch builtins. Use the NOSIMD fallback instead.
+            # The AVX/SSE object-library variants do not inherit the shared
+            # library's PIC setting. Without it, clang's __cpu_model CPU
+            # dispatch symbol produces a non-PIC relocation on Android x86.
             if(ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86")
-                target_compile_options(${pm3x_target} PRIVATE
-                    "-D__builtin_cpu_supports(x)=0"
-                    "-D__builtin_cpu_init()=")
+                target_compile_options(${pm3x_target} PRIVATE -fPIC)
             endif()
         endif()
     endforeach()

@@ -319,6 +319,19 @@ fn main() {
         }
     }
 
+    if target_os == "android" && (target_arch == "x86_64" || target_arch == "x86") {
+        if let Some(ndk) = android_ndk_dir() {
+            let arch = if target_arch == "x86" { "i686" } else { "x86_64" };
+            let name = format!("libclang_rt.builtins-{arch}-android.a");
+            if let Some(archive) = find_file(&ndk.join("toolchains/llvm/prebuilt"), &name) {
+                if let Some(dir) = archive.parent() {
+                    println!("cargo:rustc-link-search=native={}", dir.display());
+                    println!("cargo:rustc-link-lib=static=clang_rt.builtins-{arch}-android");
+                }
+            }
+        }
+    }
+
     for lib in system_libs(&build_dir, &target_os) {
         if let Some(framework) = lib.strip_prefix("framework:") {
             println!("cargo:rustc-link-lib=framework={framework}");
@@ -685,6 +698,22 @@ fn gxx_path(dir: &Path) -> PathBuf {
 // ---------------------------------------------------------------------------
 // Android
 // ---------------------------------------------------------------------------
+
+fn find_file(root: &Path, name: &str) -> Option<PathBuf> {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).ok()? {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.file_name().and_then(|value| value.to_str()) == Some(name) {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
 
 fn android_ndk_dir() -> Option<PathBuf> {
     for var in [
