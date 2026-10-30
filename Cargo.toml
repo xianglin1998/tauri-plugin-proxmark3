@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-proxmark3"
-version = "0.2.4"
+version = "0.2.5"
 description = "Proxmark3 client plugin for Tauri v2: run proxmark3 commands and get their output on Android, iOS and desktop"
 authors = ["xianglin1998"]
 license = "GPL-3.0-or-later"

@@ -555,6 +555,7 @@ fn path_with_prefix(prefix: &[PathBuf]) -> std::ffi::OsString {
 /// the CMake build. They keep the submodule checkout itself untouched.
 const SOURCE_PATCHES: &[&str] = &[
     "client/deps/hardnested/hardnested_bf_core.h",
+    "client/deps/mqtt/mqtt_pal.h",
     "client/experimental_lib/CMakeLists.txt",
     "client/src/loclass/cipher_bs_avx2.c",
     "client/src/loclass/cipher_bs_avx512.c",

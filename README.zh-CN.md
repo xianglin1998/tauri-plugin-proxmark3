@@ -78,7 +78,7 @@
 ```toml
 # 应用 crate 的 Cargo.toml
 [dependencies]
-tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.4" }
+tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.5" }
 # 或者从 GitHub Release 下载 .crate 后本地 path 依赖
 ```
 
@@ -263,8 +263,8 @@ cd examples/minimal-app && cargo build --release --target aarch64-apple-ios-sim 
   - `manifest.json`：机器可读清单，含 `proxmark3.commit` / `short_commit` / `commit_date` / `version`、固件列表以及每个资产的 SHA256
 
 ```bash
-git tag v0.2.4
-git push origin v0.2.4
+git tag v0.2.5
+git push origin v0.2.5
 ```
 
 > 固件默认不启用 standalone 模式（`STANDALONE=`）；需要各 standalone 变体时可用上游

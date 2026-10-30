@@ -91,7 +91,7 @@ What `build.rs` does:
 ```toml
 # the application crate's Cargo.toml
 [dependencies]
-tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.4" }
+tauri-plugin-proxmark3 = { git = "https://github.com/xianglin1998/tauri-plugin-proxmark3", tag = "v0.2.5" }
 # or download the .crate from a GitHub Release and use a path dependency
 ```
 
@@ -284,8 +284,8 @@ macOS, Windows, Android and iOS. `ci.yml` runs it on every push and `release.yml
     `commit_date` / `version`, the firmware matrix and the SHA256 of every asset
 
 ```bash
-git tag v0.2.4
-git push origin v0.2.4
+git tag v0.2.5
+git push origin v0.2.5
 ```
 
 > Firmware is built without a standalone mode (`STANDALONE=`); use the upstream
