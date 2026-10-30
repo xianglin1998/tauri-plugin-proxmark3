@@ -56,12 +56,25 @@ function(pm3x_relax_warnings)
             pm3rrg_rdv4_amiibo
             pm3rrg_rdv4_reveng
             pm3rrg_rdv4_hardnested
+            pm3rrg_rdv4_hardnested_avx
+            pm3rrg_rdv4_hardnested_avx2
+            pm3rrg_rdv4_hardnested_avx512
+            pm3rrg_rdv4_hardnested_sse2
+            pm3rrg_rdv4_hardnested_mmx
+            pm3rrg_rdv4_hardnested_nosimd
             pm3rrg_rdv4_id48
             pm3rrg_rdv4_mqtt
             pm3rrg_rdv4_jansson
             pm3rrg_rdv4_whereami)
         if(TARGET ${pm3x_target})
             target_compile_options(${pm3x_target} PRIVATE -Wno-error)
+            # Android clang emits non-PIC __cpu_model relocations for the
+            # runtime CPU dispatch builtins. Use the NOSIMD fallback instead.
+            if(ANDROID AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i.86")
+                target_compile_options(${pm3x_target} PRIVATE
+                    "-D__builtin_cpu_supports(x)=0"
+                    "-D__builtin_cpu_init()=")
+            endif()
         endif()
     endforeach()
 endfunction()
