@@ -573,6 +573,8 @@ const SOURCE_PATCHES: &[&str] = &[
     "client/src/loclass/cipher_bs_avx2.c",
     "client/src/loclass/cipher_bs_avx512.c",
     "client/src/util.c",
+    // iPadOS: the Proxmark3 client's AppDelegate collides with tao's class.
+    "client/src/util_darwin.m",
 ];
 
 struct SourcePatches {
