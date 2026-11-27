@@ -25,6 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -90,6 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -163,6 +165,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -211,6 +214,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -241,6 +245,8 @@ jobs:
   smoke-app:
     name: Smoke app
     uses: ./.github/workflows/smoke-app.yml
+    with:
+      ref: ${{ github.event.inputs.tag || github.ref }}
 
   # ---------------------------------------------------------------------------
   # Publish: zip firmware + resources, describe the Proxmark3 commit, release.
@@ -252,6 +258,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
