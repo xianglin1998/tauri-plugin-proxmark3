@@ -106,6 +106,12 @@ fn main() {
     // character Windows limit, so the CMake build tree lives on a short path.
     let build_dir = cmake_build_dir(&out_dir);
 
+    // Crate builds have no proxmark3/.git (the release workflow excludes it).
+    // Without a ceiling, `git describe` in mkversion.sh walks up into the
+    // consuming application's repository and reports its version as the
+    // Proxmark3 client version. Stop git at the plugin package root.
+    let git_ceiling = manifest_dir.clone();
+
     let mut configure = Command::new(cmake_program());
     configure
         .arg("-S")
@@ -245,6 +251,7 @@ fn main() {
         configure.arg("-G").arg(generator);
     }
 
+    configure.env("GIT_CEILING_DIRECTORIES", &git_ceiling);
     if !path_prefix.is_empty() {
         let path = path_with_prefix(&path_prefix);
         configure.env("PATH", &path);
@@ -260,6 +267,7 @@ fn main() {
         .arg("pm3rrg_rdv4_static")
         .arg("-j")
         .arg(num_jobs().to_string());
+    build.env("GIT_CEILING_DIRECTORIES", &git_ceiling);
     if !path_prefix.is_empty() {
         let path = path_with_prefix(&path_prefix);
         build.env("PATH", &path);
