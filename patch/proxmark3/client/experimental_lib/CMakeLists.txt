@@ -465,6 +465,8 @@ set (TARGET_SOURCES
 add_custom_command(
     OUTPUT  ${CMAKE_BINARY_DIR}/version_pm3.c
     COMMAND sh ${PM3_ROOT}/tools/mkversion.sh ${CMAKE_BINARY_DIR}/version_pm3.c || ${CMAKE_COMMAND} -E copy ${PM3_ROOT}/common/default_version_pm3.c ${CMAKE_BINARY_DIR}/version_pm3.c
+    # Run git describe inside proxmark3, not the CMake build directory.
+    WORKING_DIRECTORY ${PM3_ROOT}
     DEPENDS ${PM3_ROOT}/common/default_version_pm3.c
 )
 
@@ -566,6 +568,8 @@ endif (WHEREAMI_FOUND)
 message(STATUS "===================================================================")
 execute_process(
     COMMAND sh ${PM3_ROOT}/tools/mkversion.sh --short
+    # Keep the version shown at configure time consistent with version_pm3.c.
+    WORKING_DIRECTORY ${PM3_ROOT}
     OUTPUT_VARIABLE version_pm3
 )
 if (version_pm3 STREQUAL "")
