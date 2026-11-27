@@ -405,21 +405,21 @@ jobs:
             echo "| client version | \`${PM3_VERSION}\` |"
             echo "| repository | ${{ env.PROXMARK3_REPO }} |"
             echo ""
-            echo "本 release 的全部产物（crate / 固件 / 客户端资源）都基于同一个 Proxmark3 commit；"
-            echo "自动化流程请读取 \`manifest.json\` 中的 \`proxmark3.commit\`、\`assets[].sha256\` 与 \`firmware[]\`。"
+            echo "All release assets (crate / firmware / client resources) are built from the same Proxmark3 commit."
+            echo "Automation should read \`proxmark3.commit\`, \`assets[].sha256\`, and \`firmware[]\` from \`manifest.json\`."
             echo ""
-            echo "## 资产"
+            echo "## Assets"
             echo ""
-            echo "| 文件 | 内容 |"
+            echo "| File | Contents |"
             echo "| --- | --- |"
-            echo "| \`tauri-plugin-proxmark3-${PLUGIN_VERSION}.crate\` | Rust 插件，内含该 commit 的 proxmark3 client 源码 |"
-            echo "| \`proxmark3-firmware-${PM3_SHORT}.zip\` | bootrom + 各平台 armsrc fullimage（见下表） |"
+            echo "| \`tauri-plugin-proxmark3-${PLUGIN_VERSION}.crate\` | Rust plugin containing the proxmark3 client sources for this commit |"
+            echo "| \`proxmark3-firmware-${PM3_SHORT}.zip\` | bootrom + per-platform armsrc fullimage (see table below) |"
             echo "| \`proxmark3-client-resources-${PM3_SHORT}.zip\` | cmdscripts / dictionaries / lualibs / luascripts / pyscripts / resources |"
-            echo "| \`manifest.json\` | 机器可读的版本、commit、固件列表与 SHA256 |"
+            echo "| \`manifest.json\` | Machine-readable version, commit, firmware list, and SHA256 checksums |"
             echo ""
-            echo "## 固件（proxmark3-firmware-${PM3_SHORT}.zip）"
+            echo "## Firmware (proxmark3-firmware-${PM3_SHORT}.zip)"
             echo ""
-            echo "| ELF | PLATFORM | PLATFORM_EXTRAS | 说明 |"
+            echo "| ELF | PLATFORM | PLATFORM_EXTRAS | Notes |"
             echo "| --- | --- | --- | --- |"
             echo "| \`PM3BOOTROM.elf\` | – | – | bootrom |"
             for meta in dist/*.meta; do
@@ -438,22 +438,22 @@ jobs:
                 esac
               done < "$meta"
               note=""
-              if [ -n "$size" ]; then note="${size}KB 版本"; fi
-              if [ -n "$skips" ]; then note="${note}，带 SKIP_* 裁剪"; fi
+              if [ -n "$size" ]; then note="${size}KB build"; fi
+              if [ -n "$skips" ]; then note="${note}, with SKIP_* trimming"; fi
               extras_display="${extras:--}"
               echo "| \`${name}.elf\` | ${platform} | ${extras_display} | ${note} |"
             done
             echo ""
-            echo "## 客户端资源（proxmark3-client-resources-${PM3_SHORT}.zip）"
+            echo "## Client resources (proxmark3-client-resources-${PM3_SHORT}.zip)"
             echo ""
-            echo "解压后得到 \`share/proxmark3/{cmdscripts,dictionaries,lualibs,luascripts,pyscripts,resources}\`，"
-            echo "放到应用可执行文件目录的 \`../share/proxmark3/\`（proxmark3 client 的 \`PM3_SHARE_RELPATH\`）即可。"
+            echo "After extraction you get \`share/proxmark3/{cmdscripts,dictionaries,lualibs,luascripts,pyscripts,resources}\`."
+            echo "Place it at \`../share/proxmark3/\` relative to the application executable (the proxmark3 client's \`PM3_SHARE_RELPATH\`)."
             echo ""
-            echo "## 说明"
+            echo "## Notes"
             echo ""
-            echo "- 固件由 \`make PLATFORM=... PLATFORM_EXTRAS=... fullimage\` 构建，ELF 名称即平台与可选件组合；"
-            echo "- 默认未启用 standalone 模式（\`STANDALONE=\`）；需要时可用上游脚本 \`tools/build_all_firmwares.sh\` 构建；"
-            echo "- ARM 工具链：ubuntu 的 \`gcc-arm-none-eabi\`。"
+            echo "- Firmware is built with \`make PLATFORM=... PLATFORM_EXTRAS=... fullimage\`; the ELF name is the platform plus optional extras."
+            echo "- Standalone mode is disabled by default (\`STANDALONE=\`); use the upstream \`tools/build_all_firmwares.sh\` script when needed."
+            echo "- ARM toolchain: \`gcc-arm-none-eabi\` on Ubuntu."
           } > release-notes.md
           cat release-notes.md
 
